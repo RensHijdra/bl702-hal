@@ -2,7 +2,7 @@
 #![no_main]
 
 use bl702_hal as hal;
-use embedded_hal_alpha::digital::blocking::OutputPin;
+use embedded_hal::digital::OutputPin;
 use hal::{
     clock::{board_clock_init, system_init, ClockConfig},
     delay::McycleDelay,
@@ -12,7 +12,7 @@ use hal::{
 #[cfg(not(feature = "panic_serial"))]
 use panic_halt as _;
 
-use embedded_hal_alpha::delay::blocking::DelayMs;
+use embedded_hal::delay::DelayNs;
 
 #[riscv_rt::entry]
 fn main() -> ! {
@@ -31,9 +31,9 @@ fn main() -> ! {
 
     loop {
         led.set_high().unwrap();
-        d.delay_ms(1000).unwrap();
+        d.delay_ms(1000);
 
         led.set_low().unwrap();
-        d.delay_ms(1000).unwrap();
+        d.delay_ms(1000);
     }
 }

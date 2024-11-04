@@ -1,10 +1,7 @@
 //! Delays
 
-use core::convert::Infallible;
-use embedded_hal_alpha::delay::blocking::{DelayMs, DelayUs};
+use embedded_hal::delay::DelayNs;
 
-use embedded_hal::blocking::delay::DelayMs as DelayMsZero;
-use embedded_hal::blocking::delay::DelayUs as DelayUsZero;
 
 /// Use RISCV machine-mode cycle counter (`mcycle`) as a delay provider.
 ///
@@ -17,10 +14,10 @@ pub struct McycleDelay {
 
 impl McycleDelay {
     /// Constructs the delay provider based on core clock frequency `freq`
+    /// `freq`: System clock frequency, used to convert clock cycles
+    /// into real-world time values
     pub fn new(freq: u32) -> Self {
         Self {
-            /// System clock frequency, used to convert clock cycles
-            /// into real-world time values
             core_frequency: freq,
         }
     }
@@ -46,50 +43,20 @@ impl McycleDelay {
     }
 }
 
-impl DelayUs<u64> for McycleDelay {
-    type Error = Infallible;
+impl DelayNs for McycleDelay {
 
-    /// Performs a busy-wait loop until the number of microseconds `us` has elapsed
     #[inline]
-    fn delay_us(&mut self, us: u64) -> Result<(), Infallible> {
-        McycleDelay::delay_cycles((us * (self.core_frequency as u64)) / 1_000_000);
-
-        Ok(())
+    fn delay_ns(&mut self, ns: u32) {
+        McycleDelay::delay_cycles(((ns as u64)  * (self.core_frequency as u64)) / 1_000_000_0000u64);
     }
-}
 
-impl DelayMs<u64> for McycleDelay {
-    type Error = Infallible;
-
-    /// Performs a busy-wait loop until the number of milliseconds `ms` has elapsed
     #[inline]
-    fn delay_ms(&mut self, ms: u64) -> Result<(), Infallible> {
-        McycleDelay::delay_cycles((ms * (self.core_frequency as u64)) / 1000);
-
-        Ok(())
+    fn delay_us(&mut self, us: u32) {
+        McycleDelay::delay_cycles(((us as u64)  * (self.core_frequency as u64)) / 1_000_000u64);
     }
-}
 
-impl DelayMsZero<u64> for McycleDelay {
-    /// Performs a busy-wait loop until the number of milliseconds `ms` has elapsed
     #[inline]
-    fn delay_ms(&mut self, ms: u64) {
-        McycleDelay::delay_cycles((ms * (self.core_frequency as u64)) / 1000);
-    }
-}
-
-impl DelayMsZero<u8> for McycleDelay {
-    /// Performs a busy-wait loop until the number of milliseconds `ms` has elapsed
-    #[inline]
-    fn delay_ms(&mut self, ms: u8) {
-        McycleDelay::delay_cycles((ms as u64 * (self.core_frequency as u64)) / 1000);
-    }
-}
-
-impl DelayUsZero<u64> for McycleDelay {
-    /// Performs a busy-wait loop until the number of microseconds `us` has elapsed
-    #[inline]
-    fn delay_us(&mut self, ms: u64) {
-        McycleDelay::delay_cycles((ms * (self.core_frequency as u64)) / 1_000_000);
+    fn delay_ms(&mut self, ms: u32) {
+        McycleDelay::delay_cycles(((ms as u64) * (self.core_frequency as u64)) / 1000u64);
     }
 }

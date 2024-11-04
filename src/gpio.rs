@@ -1,12 +1,28 @@
 //! General Purpose Input/Output
 use core::marker::PhantomData;
-
 use crate::pac;
 
 /// Extension trait to split GLB peripheral into independent pins, registers and other modules
 pub trait GlbExt {
     /// Splits the register block into independent pins and modules
     fn split(self) -> Parts;
+}
+
+
+/// GPIO error
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum Error {
+    /// Framing error
+    Other
+}
+
+impl embedded_hal::digital::Error for Error {
+    fn kind(&self) -> embedded_hal::digital::ErrorKind {
+        match self {
+            _ => embedded_hal::digital::ErrorKind::Other,
+        }
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -279,14 +295,8 @@ macro_rules! impl_glb {
         /// GPIO pins
         pub mod pin {
             use core::marker::PhantomData;
-            use core::convert::Infallible;
-            use embedded_hal_alpha::digital::blocking::{InputPin, OutputPin, StatefulOutputPin, ToggleableOutputPin};
-            use embedded_hal::digital::v2::{
-                InputPin as InputPinZero,
-                OutputPin as OutputPinZero,
-                StatefulOutputPin as StatefulOutputPinZero,
-                ToggleableOutputPin as ToggleableOutputPinZero
-            };
+            use embedded_hal::digital::{InputPin, OutputPin, StatefulOutputPin};
+
             use crate::pac;
             use super::*;
 
@@ -312,6 +322,10 @@ macro_rules! impl_glb {
             /// Pin
             pub struct $Pini<MODE> {
                 pub(crate) _mode: PhantomData<MODE>,
+            }
+
+            impl<MODE> embedded_hal::digital::ErrorType for $Pini<MODE> {
+                type Error = Error;
             }
 
             impl<MODE> $Pini<MODE> {
@@ -456,25 +470,12 @@ macro_rules! impl_glb {
 
 
             impl<MODE> InputPin for $Pini<Input<MODE>> {
-                type Error = Infallible;
 
-                fn is_high(&self) -> Result<bool, Self::Error> {
+                fn is_high(&mut self) -> Result<bool, Self::Error> {
                     Ok(self.is_high_inner())
                 }
 
-                fn is_low(&self) -> Result<bool, Self::Error> {
-                    Ok(self.is_low_inner())
-                }
-            }
-
-            impl<MODE> InputPinZero for $Pini<Input<MODE>> {
-                type Error = Infallible;
-
-                fn is_high(&self) -> Result<bool, Self::Error> {
-                    Ok(self.is_high_inner())
-                }
-
-                fn is_low(&self) -> Result<bool, Self::Error> {
+                fn is_low(&mut self) -> Result<bool, Self::Error> {
                     Ok(self.is_low_inner())
                 }
             }
@@ -561,21 +562,6 @@ macro_rules! impl_glb {
 
 
             impl<MODE> OutputPin for $Pini<Output<MODE>> {
-                type Error = Infallible;
-
-                fn set_high(&mut self) -> Result<(), Self::Error> {
-                    self.set_high_inner();
-                    Ok(())
-                }
-
-                fn set_low(&mut self) -> Result<(), Self::Error> {
-                    self.set_low_inner();
-                    Ok(())
-                }
-            }
-
-            impl<MODE> OutputPinZero for $Pini<Output<MODE>> {
-                type Error = Infallible;
 
                 fn set_high(&mut self) -> Result<(), Self::Error> {
                     self.set_high_inner();
@@ -589,49 +575,12 @@ macro_rules! impl_glb {
             }
 
             impl<MODE> StatefulOutputPin for $Pini<Output<MODE>> {
-                fn is_set_high(&self) -> Result<bool, Self::Error> {
+                fn is_set_high(&mut self) -> Result<bool, Self::Error> {
                     Ok(self.is_output_high_inner())
                 }
 
-                fn is_set_low(&self) -> Result<bool, Self::Error> {
+                fn is_set_low(&mut self) -> Result<bool, Self::Error> {
                     Ok(self.is_output_low_inner())
-                }
-            }
-
-            impl<MODE> StatefulOutputPinZero for $Pini<Output<MODE>> {
-                fn is_set_high(&self) -> Result<bool, Self::Error> {
-                    Ok(self.is_output_high_inner())
-                }
-
-                fn is_set_low(&self) -> Result<bool, Self::Error> {
-                    Ok(self.is_output_low_inner())
-                }
-            }
-
-
-            impl<MODE> ToggleableOutputPin for $Pini<Output<MODE>> {
-                type Error = Infallible;
-
-                fn toggle(&mut self) -> Result<(), Self::Error> {
-                    if self.is_output_high_inner() {
-                        self.set_low_inner()
-                    } else {
-                        self.set_high_inner()
-                    }
-                    Ok(())
-                }
-            }
-
-            impl<MODE> ToggleableOutputPinZero for $Pini<Output<MODE>> {
-                type Error = Infallible;
-
-                fn toggle(&mut self) -> Result<(), Self::Error> {
-                    if self.is_output_high_inner() {
-                        self.set_low_inner()
-                    } else {
-                        self.set_high_inner()
-                    }
-                    Ok(())
                 }
             }
 

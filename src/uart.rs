@@ -2,16 +2,15 @@
 //!
 //! Only supports UART0. Only supports 2MBaud.
 use crate::clock::Clocks;
-use crate::pac;
+use crate::{pac, uart};
 
 use core::fmt;
-use embedded_hal_alpha::serial::nb::Read as ReadOne;
-use embedded_hal_alpha::serial::nb::Write as WriteOne;
 use embedded_time::rate::{Baud, Extensions};
-use nb::block;
 
 #[cfg(feature = "print_serial")]
 use core::convert::Infallible;
+use bl702_pac::UART;
+use embedded_io::{ErrorKind, Write};
 
 /// UART error
 #[derive(Debug)]
@@ -25,6 +24,25 @@ pub enum Error {
     Overrun,
     /// Parity check error
     Parity,
+}
+
+impl embedded_io::Error for uart::Error {
+    fn kind(&self) -> ErrorKind {
+        match self {
+            Error::Framing => {
+                ErrorKind::InvalidData
+            }
+            Error::Noise => {
+                ErrorKind::Other
+            }
+            Error::Overrun => {
+                ErrorKind::Other
+            }
+            Error::Parity => {
+                ErrorKind::InvalidData
+            }
+        }
+    }
 }
 
 /// Serial configuration
@@ -242,75 +260,81 @@ where
     }
 }
 
-impl<PINS> embedded_hal_alpha::serial::nb::Write<u8> for Serial<pac::UART, PINS> {
-    type Error = Error;
+impl<PINS> embedded_io::Write for Serial<pac::UART, PINS> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+        if buf.len() == 0 {
+            return Ok(0);
+        }
+        while self.uart.uart_fifo_config_1.read().tx_fifo_cnt().bits() == 0 {}
 
-    fn write(&mut self, word: u8) -> nb::Result<(), Self::Error> {
-        // If there's no room to write a byte or more to the FIFO, return WouldBlock
-        if self.uart.uart_fifo_config_1.read().tx_fifo_cnt().bits() == 0 {
-            Err(nb::Error::WouldBlock)
-        } else {
+        let mut idx = 0;
+        while self.uart.uart_fifo_config_1.read().tx_fifo_cnt().bits() > 0 {
             self.uart
                 .uart_fifo_wdata
-                .write(|w| unsafe { w.bits(word as u32) });
-            Ok(())
+                .write(|w| unsafe { w.bits(buf[idx] as u32) });
+            idx += 1;
         }
+
+        Ok(idx)
     }
 
-    fn flush(&mut self) -> nb::Result<(), Self::Error> {
-        // If we're still transmitting or have data in our 32 byte FIFO, return WouldBlock
-        if self.uart.uart_fifo_config_1.read().tx_fifo_cnt().bits() != 32
-            || self.uart.uart_status.read().sts_utx_bus_busy().bit_is_set()
-        {
-            Err(nb::Error::WouldBlock)
-        } else {
-            Ok(())
-        }
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        while self.uart.uart_fifo_config_1.read().tx_fifo_cnt() != 128 {}
+        Ok(())
     }
 }
 
-impl<PINS> embedded_hal_alpha::serial::nb::Read<u8> for Serial<pac::UART, PINS> {
-    type Error = Error;
+impl<PINS> embedded_io::ErrorType for Serial<UART, PINS> { type Error = Error; }
 
-    fn read(&mut self) -> nb::Result<u8, Self::Error> {
-        if self.uart.uart_fifo_config_1.read().rx_fifo_cnt().bits() == 0 {
-            Err(nb::Error::WouldBlock)
-        } else {
-            let ans = self.uart.uart_fifo_rdata.read().bits();
-            Ok((ans & 0xff) as u8)
+impl<PINS> embedded_io::ReadReady for Serial<pac::UART, PINS> {
+    fn read_ready(&mut self) -> Result<bool, Self::Error> {
+        Ok(self.uart.uart_fifo_config_1.read().rx_fifo_cnt().bits() != 0)
+    }
+}
+
+// impl<PINS> embedded_io::Write for Serial<pac::UART, PINS> {
+//
+//     fn write(&mut self, word: u8) -> nb::Result<(), Self::Error> {
+//         WriteOne::write(self, word)
+//     }
+//
+//     fn flush(&mut self) -> nb::Result<(), Self::Error> {
+//         WriteOne::flush(self)
+//     }
+// }
+
+impl<PINS> embedded_io::Read for Serial<pac::UART, PINS> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        if buf.len() == 0 {
+            return Ok(0);
         }
-    }
-}
+        while self.uart.uart_fifo_config_1.read().rx_fifo_cnt().bits() == 0 {}
 
-impl<PINS> embedded_hal::serial::Write<u8> for Serial<pac::UART, PINS> {
-    type Error = Error;
+        let mut idx = 0;
+        while self.uart.uart_fifo_config_1.read().rx_fifo_cnt().bits() > 0 && idx < buf.len() {
+            buf[idx] = self.uart
+                .uart_fifo_rdata
+                .read().uart_fifo_rdata().bits();
+            idx += 1;
+        }
 
-    fn write(&mut self, word: u8) -> nb::Result<(), Self::Error> {
-        WriteOne::write(self, word)
-    }
-
-    fn flush(&mut self) -> nb::Result<(), Self::Error> {
-        WriteOne::flush(self)
-    }
-}
-
-impl<PINS> embedded_hal::serial::Read<u8> for Serial<pac::UART, PINS> {
-    type Error = Error;
-
-    fn read(&mut self) -> nb::Result<u8, Self::Error> {
-        ReadOne::read(self)
+        Ok(idx)
     }
 }
 
 impl<UART, PINS> fmt::Write for Serial<UART, PINS>
 where
-    Serial<UART, PINS>: embedded_hal_alpha::serial::nb::Write<u8>,
+    Serial<UART, PINS>: embedded_io::Write,
 {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        s.as_bytes()
-            .iter()
-            .try_for_each(|c| block!(self.write(*c)))
-            .map_err(|_| fmt::Error)
+        match self.write(s.as_bytes()) {
+            Ok(_) => {
+                fmt::Result::Ok(())
+            }
+            Err(_) => {
+                fmt::Result::Err(fmt::Error)
+            }
+        }
     }
 }
 

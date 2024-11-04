@@ -2,7 +2,7 @@
 #![no_main]
 
 use bl702_hal as hal;
-use embedded_hal_alpha::digital::blocking::OutputPin;
+use embedded_hal::digital::OutputPin;
 use hal::{
     clock::{board_clock_init, system_init, ClockConfig},
     delay::McycleDelay,
@@ -42,7 +42,7 @@ fn main() -> ! {
     let spi = hal::spi::Spi::new(
         dp.SPI,
         (miso, mosi, sclk),
-        embedded_hal_alpha::spi::MODE_0,
+        embedded_hal::spi::MODE_0,
         9_000_000u32.Hz(), // fastest that obeys st7735 minimum high/low time with 36mhz bclk
         clocks,
     );

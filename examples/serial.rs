@@ -8,9 +8,9 @@ use bl702_hal::{
     uart::*,
 };
 use core::fmt::Write;
-use embedded_hal_alpha::delay::blocking::DelayMs;
+use embedded_hal::delay::DelayNs;
 
-use embedded_hal_alpha::digital::blocking::OutputPin;
+use embedded_hal::digital::OutputPin;
 #[cfg(not(feature = "panic_serial"))]
 use panic_halt as _;
 
@@ -22,7 +22,7 @@ fn main() -> ! {
     board_clock_init();
 
     let mut d = bl702_hal::delay::McycleDelay::new(bl702_hal::clock::system_frequency());
-    d.delay_ms(1000).unwrap();
+    d.delay_ms(1000);
     let dp = pac::Peripherals::take().unwrap();
     let mut parts = dp.GLB.split();
     let mut led = parts.pin17.into_pull_up_output();
@@ -50,7 +50,7 @@ fn main() -> ! {
 
     let hello = "hello rust!\r\n";
     loop {
-        d.delay_ms(100).unwrap();
+        d.delay_ms(100);
         let t = serial.write_str(hello);
         let _ = match t {
             Ok(_) => led.set_high().unwrap(),
